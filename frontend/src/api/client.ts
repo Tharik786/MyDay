@@ -2,9 +2,9 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import { storage } from '../utils/storage';
 
-// Default host points to your PC Wi-Fi LAN IP so physical phones connect immediately
+// Production hosted Render backend API
 const getDefaultHost = () => {
-  return 'http://10.168.18.165:8000/api/v1';
+  return 'https://myday-evin.onrender.com/api/v1';
 };
 
 export let API_BASE_URL = getDefaultHost();
