@@ -39,7 +39,7 @@ export const CreateEditTaskScreen: React.FC<Props> = ({ editingTask, onBack, onS
 
   const defaultDate = new Date().toISOString().split('T')[0];
   const defaultTime = '09:00';
-  const defaultTz = user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const defaultTz = user?.timezone || 'Asia/Kolkata';
 
   const [title, setTitle] = useState(editingTask?.title || '');
   const [description, setDescription] = useState(editingTask?.description || '');

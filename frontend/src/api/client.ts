@@ -1,13 +1,14 @@
 import axios from 'axios';
-import { Platform } from 'react-native';
 import { storage } from '../utils/storage';
 
-// Production hosted Render backend API
-const getDefaultHost = () => {
-  return 'https://myday-evin.onrender.com/api/v1';
+// Default production backend API endpoint
+export const DEFAULT_API_URL = 'https://myday-evin.onrender.com/api/v1';
+
+export const getDefaultHost = () => {
+  return DEFAULT_API_URL;
 };
 
-export let API_BASE_URL = getDefaultHost();
+export let API_BASE_URL = DEFAULT_API_URL;
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -17,12 +18,23 @@ export const apiClient = axios.create({
   timeout: 15000,
 });
 
-// Initialize base URL from AsyncStorage if custom exists
+// Initialize base URL from AsyncStorage or default to production Render URL
 export async function initApiClientBaseUrl(): Promise<string> {
   const savedUrl = await storage.getApiBaseUrl();
-  if (savedUrl) {
+  // If stored URL is an old local dev IP or empty, reset to default production Render URL
+  if (
+    savedUrl &&
+    !savedUrl.includes('10.') &&
+    !savedUrl.includes('192.168.') &&
+    !savedUrl.includes('localhost') &&
+    !savedUrl.includes('127.0.0.1')
+  ) {
     API_BASE_URL = savedUrl;
     apiClient.defaults.baseURL = savedUrl;
+  } else {
+    API_BASE_URL = DEFAULT_API_URL;
+    apiClient.defaults.baseURL = DEFAULT_API_URL;
+    await storage.setApiBaseUrl(DEFAULT_API_URL);
   }
   return API_BASE_URL;
 }

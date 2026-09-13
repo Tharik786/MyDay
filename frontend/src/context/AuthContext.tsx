@@ -5,6 +5,8 @@ import { storage } from '../utils/storage';
 import { initApiClientBaseUrl } from '../api/client';
 import { notificationManager } from '../notifications/notificationManager';
 
+export const DEFAULT_TIMEZONE = 'Asia/Kolkata';
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -37,12 +39,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedUser = await storage.getUser();
 
         if (storedToken && storedUser && isMounted) {
+          // Ensure default timezone is India (Asia/Kolkata)
+          if (!storedUser.timezone || storedUser.timezone === 'America/Toronto' || storedUser.timezone === 'UTC') {
+            storedUser.timezone = DEFAULT_TIMEZONE;
+            await storage.setUser(storedUser);
+          }
+
           setToken(storedToken);
           setUser(storedUser);
 
           // Refresh user profile asynchronously without blocking initial render
           authApi.getMe().then((freshUser) => {
             if (isMounted) {
+              if (!freshUser.timezone || freshUser.timezone === 'America/Toronto' || freshUser.timezone === 'UTC') {
+                freshUser.timezone = DEFAULT_TIMEZONE;
+                authApi.updateProfile({ timezone: DEFAULT_TIMEZONE }).catch(() => {});
+              }
               setUser(freshUser);
               storage.setUser(freshUser);
             }
@@ -77,6 +89,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const data = await authApi.login(payload);
+      if (!data.user.timezone || data.user.timezone === 'America/Toronto' || data.user.timezone === 'UTC') {
+        data.user.timezone = DEFAULT_TIMEZONE;
+        authApi.updateProfile({ timezone: DEFAULT_TIMEZONE }).catch(() => {});
+      }
       setToken(data.access_token);
       setUser(data.user);
       await storage.setToken(data.access_token);
@@ -89,6 +105,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (payload: RegisterPayload) => {
     setIsLoading(true);
     try {
+      if (!payload.timezone || payload.timezone === 'America/Toronto' || payload.timezone === 'UTC') {
+        payload.timezone = DEFAULT_TIMEZONE;
+      }
       const data = await authApi.register(payload);
       setToken(data.access_token);
       setUser(data.user);

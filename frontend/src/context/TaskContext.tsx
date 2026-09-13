@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { tasksApi } from '../api/tasks';
 import { schedulerSync } from '../notifications/schedulerSync';
+import { notificationManager } from '../notifications/notificationManager';
 import { useAuth } from './AuthContext';
 
 interface TaskContextType {
@@ -50,7 +51,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTasks(fetchedTasks);
       setSummary(fetchedSummary);
 
-      // Keep local notifications in sync with active scheduled tasks
+      // Resync alarms and reminders with fetched tasks
       schedulerSync.syncWithTasks(fetchedTasks).catch(console.warn);
     } catch (err) {
       console.warn('Error refreshing tasks:', err);
@@ -71,6 +72,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const createTask = async (payload: TaskCreatePayload): Promise<Task> => {
     const newTask = await tasksApi.createTask(payload);
+    // Immediately schedule alarm and reminder for new task
+    await notificationManager.scheduleTaskNotifications(newTask).catch(console.warn);
     await refreshTasks();
     return newTask;
   };
@@ -80,6 +83,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (selectedTask?.id === id) {
       setSelectedTask(updated);
     }
+    // Immediately update scheduled alarm and reminder
+    await notificationManager.scheduleTaskNotifications(updated).catch(console.warn);
     await refreshTasks();
     return updated;
   };
@@ -89,6 +94,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (selectedTask?.id === id) {
       setSelectedTask(null);
     }
+    await notificationManager.cancelTaskNotification(id).catch(console.warn);
     await refreshTasks();
   };
 
@@ -97,6 +103,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (selectedTask?.id === id) {
       setSelectedTask(updated);
     }
+    await notificationManager.cancelTaskNotification(id).catch(console.warn);
     await refreshTasks();
     return updated;
   };
@@ -106,6 +113,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (selectedTask?.id === id) {
       setSelectedTask(updated);
     }
+    await notificationManager.scheduleTaskNotifications(updated).catch(console.warn);
     await refreshTasks();
     return updated;
   };
@@ -115,6 +123,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (selectedTask?.id === id) {
       setSelectedTask(updated);
     }
+    await notificationManager.scheduleTaskNotifications(updated).catch(console.warn);
     await refreshTasks();
     return updated;
   };
@@ -124,6 +133,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (selectedTask?.id === id) {
       setSelectedTask(updated);
     }
+    await notificationManager.scheduleTaskNotifications(updated).catch(console.warn);
     await refreshTasks();
     return updated;
   };
@@ -133,6 +143,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (selectedTask?.id === id) {
       setSelectedTask(updated);
     }
+    await notificationManager.cancelTaskNotification(id).catch(console.warn);
     await refreshTasks();
     return updated;
   };

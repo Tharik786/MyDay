@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -13,22 +12,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useTasks } from '../context/TaskContext';
 import { colors } from '../theme/colors';
-import { API_BASE_URL, updateApiClientBaseUrl, apiClient } from '../api/client';
 import { notificationManager } from '../notifications/notificationManager';
-import { getCommonTimezones } from '../utils/dateUtils';
 
 export const SettingsScreen: React.FC = () => {
-  const { user, logout, updateUser } = useAuth();
+  const { user, logout } = useAuth();
   const { syncNotifications } = useTasks();
 
-  const [apiUrl, setApiUrl] = useState(API_BASE_URL);
-  const [selectedTz, setSelectedTz] = useState(user?.timezone || 'UTC');
-  const [showTzPicker, setShowTzPicker] = useState(false);
   const [notifGranted, setNotifGranted] = useState<boolean | null>(null);
-  const [isTestingApi, setIsTestingApi] = useState(false);
   const [isSyncingNotifs, setIsSyncingNotifs] = useState(false);
-
-  const commonTzs = getCommonTimezones();
 
   useEffect(() => {
     checkPermissions();
@@ -37,38 +28,6 @@ export const SettingsScreen: React.FC = () => {
   const checkPermissions = async () => {
     const granted = await notificationManager.requestPermissions();
     setNotifGranted(granted);
-  };
-
-  const handleSaveApiUrl = async () => {
-    setIsTestingApi(true);
-    try {
-      updateApiClientBaseUrl(apiUrl);
-      // Ping health endpoint
-      const res = await apiClient.get('/health', { timeout: 4000 });
-      if (res.data?.status === 'ok') {
-        Alert.alert('Connection Successful', `Connected to MyDay API at ${apiUrl}`);
-      } else {
-        Alert.alert('Response Received', `Server replied: ${JSON.stringify(res.data)}`);
-      }
-    } catch (err: any) {
-      Alert.alert(
-        'Connection Warning',
-        `Saved URL, but test request failed: ${err.message}. Make sure the FastAPI server is running.`
-      );
-    } finally {
-      setIsTestingApi(false);
-    }
-  };
-
-  const handleUpdateTz = async (tz: string) => {
-    setSelectedTz(tz);
-    setShowTzPicker(false);
-    try {
-      await updateUser({ timezone: tz });
-      Alert.alert('Success', `Default timezone updated to ${tz}`);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Could not update timezone');
-    }
   };
 
   const handleSyncNotifications = async () => {
@@ -87,8 +46,11 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const handleTestNotification = async () => {
-    await notificationManager.sendTestNotification();
-    Alert.alert('Test Sent', 'A notification will appear in 2 seconds.');
+    await notificationManager.sendTestAlarmAlert();
+    Alert.alert(
+      'Test Alarm Triggered (3s)',
+      'Lock your phone or exit the app now! The alarm alert will pop up on your lock screen with sound and action buttons.'
+    );
   };
 
   const handleLogout = () => {
@@ -119,36 +81,6 @@ export const SettingsScreen: React.FC = () => {
             <Text style={styles.profileEmail}>{user?.email}</Text>
           </View>
         </View>
-
-        {/* Timezone Selector */}
-        <View style={styles.settingItem}>
-          <View style={styles.settingTextCol}>
-            <Text style={styles.settingTitle}>Default Timezone</Text>
-            <Text style={styles.settingDesc}>Current: {selectedTz}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.changeBtn}
-            onPress={() => setShowTzPicker(!showTzPicker)}
-          >
-            <Text style={styles.changeBtnText}>Change</Text>
-          </TouchableOpacity>
-        </View>
-
-        {showTzPicker && (
-          <View style={styles.tzDropdown}>
-            {commonTzs.map(tz => (
-              <TouchableOpacity
-                key={tz}
-                style={[styles.tzItem, tz === selectedTz && styles.tzItemSelected]}
-                onPress={() => handleUpdateTz(tz)}
-              >
-                <Text style={[styles.tzItemText, tz === selectedTz && styles.tzItemTextSelected]}>
-                  {tz}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </View>
 
       {/* Notifications Section */}
@@ -201,62 +133,6 @@ export const SettingsScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Backend API Configuration */}
-      <View style={styles.card}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="server-outline" size={20} color={colors.accent} style={{ marginRight: 8 }} />
-          <Text style={styles.sectionTitle}>Backend API Endpoint</Text>
-        </View>
-        <Text style={styles.settingDesc}>
-          Set the server URL. Use your PC's LAN IP when testing on a physical phone via Expo Go.
-        </Text>
-
-        <View style={styles.urlInputRow}>
-          <TextInput
-            style={styles.urlInput}
-            value={apiUrl}
-            onChangeText={setApiUrl}
-            placeholder="http://192.168.1.100:8000/api/v1"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-          />
-        </View>
-
-        {/* Quick Presets */}
-        <View style={styles.presetRow}>
-          <TouchableOpacity
-            style={styles.presetChip}
-            onPress={() => setApiUrl('http://10.168.18.165:8000/api/v1')}
-          >
-            <Text style={[styles.presetText, { color: colors.primaryLight, fontWeight: '700' }]}>PC Wi-Fi (10.168.18.165)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.presetChip}
-            onPress={() => setApiUrl('http://10.0.2.2:8000/api/v1')}
-          >
-            <Text style={styles.presetText}>Emulator (10.0.2.2)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.presetChip}
-            onPress={() => setApiUrl('http://127.0.0.1:8000/api/v1')}
-          >
-            <Text style={styles.presetText}>Localhost</Text>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          style={styles.testBtn}
-          onPress={handleSaveApiUrl}
-          disabled={isTestingApi}
-        >
-          {isTestingApi ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.testBtnText}>Save & Test Connection</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
       {/* Logout */}
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
         <Ionicons name="log-out-outline" size={20} color={colors.danger} style={{ marginRight: 8 }} />
@@ -292,7 +168,6 @@ const styles = StyleSheet.create({
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
   },
   avatar: {
     width: 52,
@@ -361,31 +236,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primaryLight,
   },
-  tzDropdown: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 12,
-    marginTop: 10,
-    maxHeight: 180,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tzItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  tzItemSelected: {
-    backgroundColor: colors.primaryGlow,
-  },
-  tzItemText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  tzItemTextSelected: {
-    color: colors.primaryLight,
-    fontWeight: '700',
-  },
   divider: {
     height: 1,
     backgroundColor: colors.border,
@@ -405,46 +255,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 2,
-  },
-  urlInputRow: {
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  urlInput: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: colors.textPrimary,
-    fontSize: 14,
-  },
-  presetRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  presetChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    backgroundColor: colors.surfaceElevated,
-  },
-  presetText: {
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  testBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  testBtnText: {
-    color: colors.white,
-    fontWeight: '700',
-    fontSize: 14,
   },
   logoutBtn: {
     flexDirection: 'row',

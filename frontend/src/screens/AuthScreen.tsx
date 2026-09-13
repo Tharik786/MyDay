@@ -40,12 +40,12 @@ export const AuthScreen: React.FC = () => {
       if (isLogin) {
         await login({ email: email.trim(), password });
       } else {
-        const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        const defaultTz = 'Asia/Kolkata';
         await register({
           email: email.trim(),
           password,
           full_name: fullName.trim() || undefined,
-          timezone: detectedTz,
+          timezone: defaultTz,
         });
       }
     } catch (err: any) {
@@ -194,29 +194,24 @@ const styles = StyleSheet.create({
   },
   brandContainer: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 32,
   },
   logoCircle: {
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.primaryGlow,
     borderWidth: 1.5,
     borderColor: 'rgba(99, 102, 241, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
   },
   appName: {
-    fontSize: 32,
-    fontWeight: '900',
+    fontSize: 28,
+    fontWeight: '800',
     color: colors.textPrimary,
-    letterSpacing: 0.5,
+    letterSpacing: -0.5,
   },
   tagline: {
     fontSize: 14,
@@ -229,16 +224,16 @@ const styles = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: colors.black,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
-    elevation: 6,
+    elevation: 8,
   },
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceElevated,
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 4,
     marginBottom: 20,
   },
@@ -258,7 +253,6 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: colors.white,
-    fontWeight: '700',
   },
   errorBanner: {
     flexDirection: 'row',
@@ -271,36 +265,34 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   errorText: {
-    flex: 1,
-    fontSize: 13,
     color: colors.danger,
+    fontSize: 13,
+    flex: 1,
   },
   inputGroup: {
     marginBottom: 16,
   },
   inputLabel: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textSecondary,
     marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceElevated,
-    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    height: 50,
   },
   inputIcon: {
     marginRight: 10,
   },
   input: {
     flex: 1,
+    paddingVertical: 14,
     color: colors.textPrimary,
     fontSize: 15,
   },
@@ -309,15 +301,14 @@ const styles = StyleSheet.create({
   },
   submitBtn: {
     backgroundColor: colors.primary,
-    height: 52,
     borderRadius: 14,
-    justifyContent: 'center',
+    paddingVertical: 15,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 4,
   },
   submitBtnText: {

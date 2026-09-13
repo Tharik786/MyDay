@@ -52,5 +52,9 @@ async def init_db():
     from app.models.task import Task
     from app.models.history import TaskHistory
 
+    db_target = "Supabase PostgreSQL" if "postgresql" in str(engine.url) else "local SQLite fallback (myday.db)"
+    print(f"--> Initializing database tables on: {db_target}")
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    print(f"--> Database tables ready on: {db_target}")

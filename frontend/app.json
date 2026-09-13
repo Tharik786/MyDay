@@ -21,6 +21,9 @@
       },
       "permissions": [
         "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "WAKE_LOCK",
+        "USE_FULL_SCREEN_INTENT",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
         "POST_NOTIFICATIONS"
@@ -38,6 +41,11 @@
     ],
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c33a3f60-4e8d-4efc-ad46-b0028561e803"
+      }
     }
   }
 }

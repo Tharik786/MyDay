@@ -50,7 +50,7 @@ class Task(Base):
     # Schedule anchor
     start_date = Column(Date, nullable=False)
     start_time = Column(Time, nullable=False)
-    timezone = Column(String(64), default="UTC", nullable=False)
+    timezone = Column(String(64), default="Asia/Kolkata", nullable=False)
     
     # Recurrence rules
     recurrence_type = Column(SQLEnum(RecurrenceType), default=RecurrenceType.ONE_TIME, nullable=False)

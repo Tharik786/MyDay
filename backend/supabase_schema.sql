@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     hashed_password VARCHAR(255) NOT NULL,
     full_name VARCHAR(255),
-    timezone VARCHAR(64) DEFAULT 'UTC' NOT NULL,
+    timezone VARCHAR(64) DEFAULT 'Asia/Kolkata' NOT NULL,
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW()),
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
 );
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT,
     start_date DATE NOT NULL,
     start_time TIME NOT NULL,
-    timezone VARCHAR(64) DEFAULT 'UTC' NOT NULL,
+    timezone VARCHAR(64) DEFAULT 'Asia/Kolkata' NOT NULL,
     recurrence_type recurrence_type DEFAULT 'ONE_TIME' NOT NULL,
     recurrence_days JSONB,
     interval_value INTEGER,

@@ -9,7 +9,7 @@ class TaskBase(BaseModel):
     description: Optional[str] = None
     start_date: date
     start_time: time
-    timezone: str = "UTC"
+    timezone: str = "Asia/Kolkata"
     recurrence_type: RecurrenceType = RecurrenceType.ONE_TIME
     recurrence_days: Optional[List[int]] = None  # 0=Monday, 6=Sunday
     interval_value: Optional[int] = Field(None, ge=1)

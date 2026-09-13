@@ -5,8 +5,8 @@ import { storage } from '../utils/storage';
 
 export const schedulerSync = {
   /**
-   * Reschedules local notifications for all active tasks.
-   * Call on app startup, user login, and whenever tasks are refreshed.
+   * Reschedules local alarms and reminders for all active tasks.
+   * Called on app startup, user login, and whenever tasks are created or refreshed.
    */
   async syncWithTasks(tasks: Task[]): Promise<number> {
     const hasPermission = await notificationManager.requestPermissions();
@@ -14,26 +14,17 @@ export const schedulerSync = {
       return 0;
     }
 
-    // Cancel all previously scheduled notifications to eliminate orphaned or duplicate alarms
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    // Clear previous scheduled notifications to eliminate orphaned or duplicate alarms
+    await Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
     await storage.setNotificationMap({});
 
     let scheduledCount = 0;
-    const now = Date.now();
-    const maxLookaheadMs = 14 * 24 * 60 * 60 * 1000; // 14 days lookahead
 
     for (const task of tasks) {
-      if (task.status === 'ACTIVE' && task.next_run_at) {
-        const runTime = new Date(task.next_run_at).getTime();
-        const leadMs = (task.lead_time_minutes || 0) * 60 * 1000;
-        const triggerTime = runTime - leadMs;
-
-        // Ensure trigger is in future and within lookahead window
-        if (triggerTime > now && triggerTime - now <= maxLookaheadMs) {
-          const id = await notificationManager.scheduleTaskNotification(task);
-          if (id) {
-            scheduledCount++;
-          }
+      if (task.status === 'ACTIVE') {
+        const { alarmId, reminderId } = await notificationManager.scheduleTaskNotifications(task);
+        if (alarmId || reminderId) {
+          scheduledCount++;
         }
       }
     }

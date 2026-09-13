@@ -51,7 +51,7 @@ export const storage = {
     await AsyncStorage.setItem(API_URL_KEY, url);
   },
 
-  async getNotificationMap(): Promise<Record<number, string>> {
+  async getNotificationMap(): Promise<Record<number, any>> {
     try {
       const raw = await AsyncStorage.getItem(NOTIF_MAP_KEY);
       return raw ? JSON.parse(raw) : {};
@@ -60,7 +60,7 @@ export const storage = {
     }
   },
 
-  async setNotificationMap(map: Record<number, string>): Promise<void> {
+  async setNotificationMap(map: Record<number, any>): Promise<void> {
     await AsyncStorage.setItem(NOTIF_MAP_KEY, JSON.stringify(map));
   },
 

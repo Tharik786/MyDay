@@ -24,7 +24,7 @@ export const RescheduleModal: React.FC<Props> = ({
 }) => {
   const [newDate, setNewDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
   const [newTime, setNewTime] = useState(initialTime ? initialTime.slice(0, 5) : '09:00');
-  const [newTimezone, setNewTimezone] = useState(initialTimezone || 'UTC');
+  const [newTimezone, setNewTimezone] = useState(initialTimezone || 'Asia/Kolkata');
   const [loading, setLoading] = useState(false);
   const [showTzPicker, setShowTzPicker] = useState(false);
 
