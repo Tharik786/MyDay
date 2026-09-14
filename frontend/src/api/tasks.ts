@@ -6,10 +6,21 @@ import {
   TaskSummary, 
   TaskStatus,
   SnoozePayload,
-  ReschedulePayload
+  ReschedulePayload,
+  PlanDayRequest,
+  PlanDayResponse
 } from '../types';
 
 export const tasksApi = {
+  async planDay(payload: PlanDayRequest): Promise<PlanDayResponse> {
+    const res = await apiClient.post<PlanDayResponse>('/tasks/plan-day', payload);
+    return res.data;
+  },
+
+  async createBatchTasks(tasks: TaskCreatePayload[]): Promise<Task[]> {
+    const res = await apiClient.post<Task[]>('/tasks/batch', { tasks });
+    return res.data;
+  },
   async getTasks(params?: { status?: TaskStatus; search?: string; date_filter?: string }): Promise<Task[]> {
     const res = await apiClient.get<Task[]>('/tasks', { params });
     return res.data;

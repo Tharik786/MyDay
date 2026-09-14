@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
   StatusBar,
   Modal,
+  Platform,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -16,6 +18,7 @@ import { TaskProvider, useTasks } from './src/context/TaskContext';
 import { colors } from './src/theme/colors';
 import { ScreenTab, Task } from './src/types';
 import { registerInAppAlarmListener } from './src/notifications/notificationManager';
+import { soundManager } from './src/services/soundManager';
 
 import { AuthScreen } from './src/screens/AuthScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -24,6 +27,10 @@ import { CreateEditTaskScreen } from './src/screens/CreateEditTaskScreen';
 import { TaskDetailsScreen } from './src/screens/TaskDetailsScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+
+const ANDROID_STATUS_BAR = Platform.OS === 'android'
+  ? Math.max(Constants.statusBarHeight || 0, StatusBar.currentHeight || 0, 48)
+  : (Constants.statusBarHeight || 0);
 
 const MainNavigator: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -54,34 +61,8 @@ const MainNavigator: React.FC = () => {
     return <AuthScreen />;
   }
 
-  // Sub-screens (Task Details or Edit Screen)
-  if (editingTask) {
-    return (
-      <CreateEditTaskScreen
-        editingTask={editingTask}
-        onBack={() => setEditingTask(null)}
-        onSaved={() => {
-          setEditingTask(null);
-          setCurrentTab('tasks');
-        }}
-      />
-    );
-  }
+  const isSubScreen = !!editingTask || !!selectedTask;
 
-  if (selectedTask) {
-    return (
-      <TaskDetailsScreen
-        task={selectedTask}
-        onBack={() => setSelectedTask(null)}
-        onEdit={(task) => {
-          setEditingTask(task);
-          setSelectedTask(null);
-        }}
-      />
-    );
-  }
-
-  // Active Tab View
   const renderCurrentScreen = () => {
     switch (currentTab) {
       case 'home':
@@ -116,6 +97,36 @@ const MainNavigator: React.FC = () => {
     }
   };
 
+  const renderActiveScreen = () => {
+    if (editingTask) {
+      return (
+        <CreateEditTaskScreen
+          editingTask={editingTask}
+          onBack={() => setEditingTask(null)}
+          onSaved={() => {
+            setEditingTask(null);
+            setCurrentTab('tasks');
+          }}
+        />
+      );
+    }
+
+    if (selectedTask) {
+      return (
+        <TaskDetailsScreen
+          task={selectedTask}
+          onBack={() => setSelectedTask(null)}
+          onEdit={(task) => {
+            setEditingTask(task);
+            setSelectedTask(null);
+          }}
+        />
+      );
+    }
+
+    return renderCurrentScreen();
+  };
+
   const tabs: { id: ScreenTab; label: string; icon: keyof typeof Ionicons.glyphMap; iconActive: keyof typeof Ionicons.glyphMap }[] = [
     { id: 'home', label: 'Home', icon: 'home-outline', iconActive: 'home' },
     { id: 'tasks', label: 'Tasks', icon: 'list-outline', iconActive: 'list' },
@@ -127,7 +138,7 @@ const MainNavigator: React.FC = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ExpoStatusBar style="light" />
-      <View style={styles.screenBody}>{renderCurrentScreen()}</View>
+      <View style={styles.screenBody}>{renderActiveScreen()}</View>
 
       {/* In-App Active Alarm Modal Popup */}
       {activeAlarm && (
@@ -146,6 +157,7 @@ const MainNavigator: React.FC = () => {
               <TouchableOpacity
                 style={styles.alarmTurnOffBtn}
                 onPress={async () => {
+                  await soundManager.stopAlarm();
                   if (activeAlarm.taskId) {
                     await completeTask(activeAlarm.taskId).catch(console.warn);
                   }
@@ -161,6 +173,7 @@ const MainNavigator: React.FC = () => {
                 <TouchableOpacity
                   style={styles.alarmSnoozeBtn}
                   onPress={async () => {
+                    await soundManager.stopAlarm();
                     if (activeAlarm.taskId) {
                       await snoozeTask(activeAlarm.taskId, { duration_minutes: 10 }).catch(console.warn);
                     }
@@ -174,7 +187,10 @@ const MainNavigator: React.FC = () => {
 
                 <TouchableOpacity
                   style={styles.alarmDismissBtn}
-                  onPress={() => setActiveAlarm(null)}
+                  onPress={async () => {
+                    await soundManager.stopAlarm();
+                    setActiveAlarm(null);
+                  }}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.alarmDismissText}>Dismiss</Text>
@@ -185,42 +201,44 @@ const MainNavigator: React.FC = () => {
         </Modal>
       )}
 
-      {/* Bottom Tab Bar */}
-      <View style={styles.bottomBar}>
-        {tabs.map((tab) => {
-          const isActive = currentTab === tab.id;
-          const isCreate = tab.id === 'create';
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.tabItem, isCreate && styles.createTabItem]}
-              onPress={() => {
-                setSelectedTask(null);
-                setEditingTask(null);
-                setCurrentTab(tab.id);
-              }}
-              activeOpacity={0.7}
-            >
-              {isCreate ? (
-                <View style={styles.createBtnCircle}>
-                  <Ionicons name="add" size={26} color={colors.white} />
-                </View>
-              ) : (
-                <>
-                  <Ionicons
-                    name={isActive ? tab.iconActive : tab.icon}
-                    size={22}
-                    color={isActive ? colors.primaryLight : colors.textMuted}
-                  />
-                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                    {tab.label}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {/* Bottom Tab Bar (Only visible on main screens) */}
+      {!isSubScreen && (
+        <View style={styles.bottomBar}>
+          {tabs.map((tab) => {
+            const isActive = currentTab === tab.id;
+            const isCreate = tab.id === 'create';
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tabItem, isCreate && styles.createTabItem]}
+                onPress={() => {
+                  setSelectedTask(null);
+                  setEditingTask(null);
+                  setCurrentTab(tab.id);
+                }}
+                activeOpacity={0.7}
+              >
+                {isCreate ? (
+                  <View style={styles.createBtnCircle}>
+                    <Ionicons name="add" size={26} color={colors.white} />
+                  </View>
+                ) : (
+                  <>
+                    <Ionicons
+                      name={isActive ? tab.iconActive : tab.icon}
+                      size={22}
+                      color={isActive ? colors.primaryLight : colors.textMuted}
+                    />
+                    <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                      {tab.label}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -239,7 +257,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: StatusBar.currentHeight || 0,
+    paddingTop: ANDROID_STATUS_BAR,
   },
   screenBody: {
     flex: 1,

@@ -44,6 +44,24 @@ export const TaskCard: React.FC<Props> = ({
         <View style={styles.badges}>
           <StatusBadge status={task.status} />
           <PriorityBadge priority={task.priority} />
+          {task.reminder_mode === 'ALARM' && (
+            <View style={styles.alarmBadge}>
+              <Ionicons name="alarm" size={11} color={colors.danger} style={{ marginRight: 3 }} />
+              <Text style={styles.alarmBadgeText}>Alarm</Text>
+            </View>
+          )}
+          {task.smart_escalation && (
+            <View style={styles.escalationBadge}>
+              <Ionicons name="flame" size={11} color={colors.warning} style={{ marginRight: 3 }} />
+              <Text style={styles.escalationBadgeText}>Escalate</Text>
+            </View>
+          )}
+          {task.is_location_based && (
+            <View style={styles.locationBadge}>
+              <Ionicons name="location" size={11} color={colors.primaryLight} style={{ marginRight: 3 }} />
+              <Text style={styles.locationBadgeText}>{task.location_name || 'Location'}</Text>
+            </View>
+          )}
         </View>
 
         {task.next_run_at && (
@@ -162,7 +180,55 @@ const styles = StyleSheet.create({
   badges: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  alarmBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.dangerGlow,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+  },
+  alarmBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  escalationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  escalationBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.warning,
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primaryGlow,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+    maxWidth: 110,
+  },
+  locationBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.primaryLight,
   },
   timeChip: {
     flexDirection: 'row',

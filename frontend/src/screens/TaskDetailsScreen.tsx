@@ -106,9 +106,12 @@ export const TaskDetailsScreen: React.FC<Props> = ({ task, onBack, onEdit }) => 
     <View style={styles.container}>
       {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.headerBtn} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={onBack} style={styles.headerBtn} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Task Details</Text>
+        </View>
 
         <View style={styles.headerRight}>
           <TouchableOpacity onPress={() => onEdit(task)} style={styles.headerBtn} activeOpacity={0.7}>
@@ -185,6 +188,29 @@ export const TaskDetailsScreen: React.FC<Props> = ({ task, onBack, onEdit }) => 
                 {task.lead_time_minutes > 0 ? `${task.lead_time_minutes} min before` : 'At event time'}
               </Text>
             </View>
+
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Alert Mode</Text>
+              <Text style={[styles.detailValue, task.reminder_mode === 'ALARM' && { color: colors.danger, fontWeight: '700' }]}>
+                {task.reminder_mode === 'ALARM' ? `🚨 Smart Alarm (${task.alarm_sound || 'default'})` : '🔔 Standard Notification'}
+              </Text>
+            </View>
+
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Smart Escalation</Text>
+              <Text style={[styles.detailValue, task.smart_escalation && { color: colors.warning, fontWeight: '700' }]}>
+                {task.smart_escalation ? '🔥 Enabled (T → T+15m → T+30m → T+45m)' : 'Disabled'}
+              </Text>
+            </View>
+
+            {task.is_location_based && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Location Trigger</Text>
+                <Text style={[styles.detailValue, { color: colors.primaryLight, fontWeight: '700' }]}>
+                  📍 {task.location_trigger === 'ENTER' ? 'Arrive at' : 'Leave'} {task.location_name || 'Location'} ({task.location_radius || 200}m)
+                </Text>
+              </View>
+            )}
 
             {task.end_date && (
               <View style={styles.detailItem}>
@@ -325,6 +351,17 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 0.3,
   },
   headerBtn: {
     width: 40,

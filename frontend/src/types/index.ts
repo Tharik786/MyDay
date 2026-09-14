@@ -32,6 +32,10 @@ export interface User {
   updated_at: string;
 }
 
+export type ReminderMode = 'NOTIFICATION' | 'ALARM';
+
+export type LocationTrigger = 'ENTER' | 'EXIT';
+
 export interface Task {
   id: number;
   user_id: number;
@@ -52,6 +56,18 @@ export interface Task {
   last_run_at?: string; // ISO string
   snoozed_until?: string; // ISO string
   notification_id?: string;
+  
+  // MyDay 2.0
+  reminder_mode?: ReminderMode;
+  alarm_sound?: string;
+  smart_escalation?: boolean;
+  is_location_based?: boolean;
+  location_name?: string;
+  location_lat?: number;
+  location_lng?: number;
+  location_radius?: number;
+  location_trigger?: LocationTrigger;
+
   created_at: string;
   updated_at: string;
 }
@@ -69,6 +85,17 @@ export interface TaskCreatePayload {
   end_date?: string;
   priority: TaskPriority;
   lead_time_minutes: number;
+  
+  // MyDay 2.0
+  reminder_mode?: ReminderMode;
+  alarm_sound?: string;
+  smart_escalation?: boolean;
+  is_location_based?: boolean;
+  location_name?: string;
+  location_lat?: number;
+  location_lng?: number;
+  location_radius?: number;
+  location_trigger?: LocationTrigger;
 }
 
 export interface TaskUpdatePayload {
@@ -85,6 +112,17 @@ export interface TaskUpdatePayload {
   priority?: TaskPriority;
   lead_time_minutes?: number;
   status?: TaskStatus;
+  
+  // MyDay 2.0
+  reminder_mode?: ReminderMode;
+  alarm_sound?: string;
+  smart_escalation?: boolean;
+  is_location_based?: boolean;
+  location_name?: string;
+  location_lat?: number;
+  location_lng?: number;
+  location_radius?: number;
+  location_trigger?: LocationTrigger;
 }
 
 export interface TaskSummary {
@@ -117,4 +155,34 @@ export interface ReschedulePayload {
   new_timezone?: string;
 }
 
+// AI Daily Planner types
+export interface PlanDayRequest {
+  prompt: string;
+  plan_date?: string; // YYYY-MM-DD
+  day_start_time?: string;
+  day_end_time?: string;
+  timezone?: string;
+}
+
+export interface PlanDayItem {
+  id?: string;
+  title: string;
+  description?: string;
+  start_date: string;
+  start_time: string;
+  duration_minutes: number;
+  priority: TaskPriority;
+  reminder_mode?: ReminderMode;
+  smart_escalation?: boolean;
+  reasoning?: string;
+}
+
+export interface PlanDayResponse {
+  summary: string;
+  plan_date: string;
+  items: PlanDayItem[];
+  conflict_notes?: string[];
+}
+
 export type ScreenTab = 'home' | 'tasks' | 'create' | 'history' | 'settings' | 'details';
+

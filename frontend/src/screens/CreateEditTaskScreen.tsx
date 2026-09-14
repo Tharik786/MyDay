@@ -12,11 +12,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTasks } from '../context/TaskContext';
 import { useAuth } from '../context/AuthContext';
-import { Task, RecurrenceType, IntervalUnit, TaskPriority } from '../types';
+import { Task, RecurrenceType, IntervalUnit, TaskPriority, ReminderMode, LocationTrigger } from '../types';
 import { colors } from '../theme/colors';
 import { HeaderBar } from '../components/HeaderBar';
 import { SchedulePicker } from '../components/SchedulePicker';
-import { getCommonTimezones } from '../utils/dateUtils';
+import { getCommonTimezones, getLocalTodayDateString, to12HourParts, to24HourString } from '../utils/dateUtils';
+import { locationManager } from '../services/locationManager';
+import { soundManager } from '../services/soundManager';
 
 interface Props {
   editingTask?: Task | null;
@@ -37,16 +39,16 @@ export const CreateEditTaskScreen: React.FC<Props> = ({ editingTask, onBack, onS
 
   const isEdit = !!editingTask;
 
-  const defaultDate = new Date().toISOString().split('T')[0];
-  const defaultTime = '09:00';
+  const defaultDate = getLocalTodayDateString();
   const defaultTz = user?.timezone || 'Asia/Kolkata';
 
   const [title, setTitle] = useState(editingTask?.title || '');
   const [description, setDescription] = useState(editingTask?.description || '');
   const [startDate, setStartDate] = useState(editingTask?.start_date || defaultDate);
-  const [startTime, setStartTime] = useState(
-    editingTask?.start_time ? editingTask.start_time.slice(0, 5) : defaultTime
-  );
+  const initialTimeParts = to12HourParts(editingTask?.start_time || '09:00');
+  const [hour12, setHour12] = useState<number>(initialTimeParts.hour);
+  const [minute12, setMinute12] = useState<string>(initialTimeParts.minute);
+  const [ampm, setAmPm] = useState<'AM' | 'PM'>(initialTimeParts.ampm);
   const [timezone, setTimezone] = useState(editingTask?.timezone || defaultTz);
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>(
     editingTask?.recurrence_type || 'DAILY'
@@ -67,6 +69,37 @@ export const CreateEditTaskScreen: React.FC<Props> = ({ editingTask, onBack, onS
     editingTask?.lead_time_minutes ?? 15
   );
 
+  // MyDay 2.0 Feature States
+  const [reminderMode, setReminderMode] = useState<ReminderMode>(
+    editingTask?.reminder_mode || 'NOTIFICATION'
+  );
+  const [alarmSound, setAlarmSound] = useState<string>(
+    editingTask?.alarm_sound || 'default'
+  );
+  const [smartEscalation, setSmartEscalation] = useState<boolean>(
+    editingTask?.smart_escalation ?? false
+  );
+  const [isLocationBased, setIsLocationBased] = useState<boolean>(
+    editingTask?.is_location_based ?? false
+  );
+  const [locationName, setLocationName] = useState<string>(
+    editingTask?.location_name || ''
+  );
+  const [locationLat, setLocationLat] = useState<number | undefined>(
+    editingTask?.location_lat
+  );
+  const [locationLng, setLocationLng] = useState<number | undefined>(
+    editingTask?.location_lng
+  );
+  const [locationRadius, setLocationRadius] = useState<number>(
+    editingTask?.location_radius || 200
+  );
+  const [locationTrigger, setLocationTrigger] = useState<LocationTrigger>(
+    editingTask?.location_trigger || 'ENTER'
+  );
+  const [locating, setLocating] = useState<boolean>(false);
+  const [testingSound, setTestingSound] = useState<boolean>(false);
+
   const [showTzPicker, setShowTzPicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -83,14 +116,13 @@ export const CreateEditTaskScreen: React.FC<Props> = ({ editingTask, onBack, onS
       setErrorMsg('Start date is required.');
       return;
     }
-    if (!startTime) {
-      setErrorMsg('Start time is required.');
-      return;
-    }
 
     setLoading(true);
     try {
-      const formattedTime = startTime.length === 5 ? `${startTime}:00` : startTime;
+      const safeHour = Math.min(Math.max(Number(hour12) || 1, 1), 12);
+      const safeMinNum = Math.min(Math.max(Number(minute12) || 0, 0), 59);
+      const safeMinute = String(safeMinNum).padStart(2, '0');
+      const formattedTime = to24HourString(safeHour, safeMinute, ampm);
       const payload: any = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -104,6 +136,16 @@ export const CreateEditTaskScreen: React.FC<Props> = ({ editingTask, onBack, onS
         end_date: hasEndDate && endDate ? endDate : undefined,
         priority,
         lead_time_minutes: leadTimeMinutes,
+        // MyDay 2.0
+        reminder_mode: reminderMode,
+        alarm_sound: reminderMode === 'ALARM' ? alarmSound : undefined,
+        smart_escalation: smartEscalation,
+        is_location_based: isLocationBased,
+        location_name: isLocationBased ? locationName.trim() : undefined,
+        location_lat: isLocationBased ? locationLat : undefined,
+        location_lng: isLocationBased ? locationLng : undefined,
+        location_radius: isLocationBased ? locationRadius : undefined,
+        location_trigger: isLocationBased ? locationTrigger : undefined,
       };
 
       if (isEdit && editingTask) {
@@ -160,34 +202,188 @@ export const CreateEditTaskScreen: React.FC<Props> = ({ editingTask, onBack, onS
           />
         </View>
 
-        {/* Start Date & Time Row */}
-        <View style={styles.row}>
-          <View style={[styles.inputGroup, { flex: 1 }]}>
+        {/* Start Date */}
+        <View style={styles.inputGroup}>
+          <View style={styles.labelRow}>
             <Text style={styles.label}>Start Date</Text>
-            <View style={styles.inputWithIcon}>
-              <Ionicons name="calendar-outline" size={16} color={colors.textMuted} style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.inlineInput}
-                value={startDate}
-                onChangeText={setStartDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-              />
+            <View style={styles.quickDateChips}>
+              <TouchableOpacity
+                style={[styles.quickDateChip, startDate === getLocalTodayDateString() && styles.quickDateChipActive]}
+                onPress={() => setStartDate(getLocalTodayDateString())}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.quickDateText, startDate === getLocalTodayDateString() && styles.quickDateTextActive]}>
+                  Today
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickDateChip}
+                onPress={() => {
+                  const tm = new Date();
+                  tm.setDate(tm.getDate() + 1);
+                  const y = tm.getFullYear();
+                  const m = String(tm.getMonth() + 1).padStart(2, '0');
+                  const d = String(tm.getDate()).padStart(2, '0');
+                  setStartDate(`${y}-${m}-${d}`);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.quickDateText}>Tomorrow</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.inputWithIcon}>
+            <Ionicons name="calendar-outline" size={16} color={colors.textMuted} style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.inlineInput}
+              value={startDate}
+              onChangeText={setStartDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+        </View>
+
+        {/* 12-Hour AM/PM Start Time */}
+        <View style={styles.inputGroup}>
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>Start Time (12-Hour AM/PM)</Text>
+            <View style={styles.liveTimeBadge}>
+              <Ionicons name="time-outline" size={14} color={colors.primaryLight} style={{ marginRight: 4 }} />
+              <Text style={styles.liveTimeText}>
+                {String(hour12).padStart(2, '0')}:{minute12.padStart(2, '0')} {ampm}
+              </Text>
             </View>
           </View>
 
-          <View style={[styles.inputGroup, { flex: 1 }]}>
-            <Text style={styles.label}>Start Time</Text>
-            <View style={styles.inputWithIcon}>
-              <Ionicons name="time-outline" size={16} color={colors.textMuted} style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.inlineInput}
-                value={startTime}
-                onChangeText={setStartTime}
-                placeholder="09:00"
-                placeholderTextColor={colors.textMuted}
-              />
+          {/* Time Picker Controls */}
+          <View style={styles.timePickerContainer}>
+            {/* Hour Block */}
+            <View style={styles.timeBlock}>
+              <Text style={styles.timeBlockLabel}>HOUR</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => setHour12((h) => (h <= 1 ? 12 : h - 1))}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-down" size={18} color={colors.textPrimary} />
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.timeValueInput}
+                  value={String(hour12).padStart(2, '0')}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  onChangeText={(val) => {
+                    const num = parseInt(val, 10);
+                    if (!isNaN(num)) {
+                      if (num >= 1 && num <= 12) setHour12(num);
+                    } else if (val === '') {
+                      setHour12(1);
+                    }
+                  }}
+                />
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => setHour12((h) => (h >= 12 ? 1 : h + 1))}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-up" size={18} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
             </View>
+
+            <Text style={styles.timeColon}>:</Text>
+
+            {/* Minute Block */}
+            <View style={styles.timeBlock}>
+              <Text style={styles.timeBlockLabel}>MINUTE</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => {
+                    const curr = parseInt(minute12, 10) || 0;
+                    const next = curr <= 0 ? 55 : curr - 5;
+                    setMinute12(String(next).padStart(2, '0'));
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-down" size={18} color={colors.textPrimary} />
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.timeValueInput}
+                  value={minute12.padStart(2, '0')}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  onChangeText={(val) => {
+                    const clean = val.replace(/[^0-9]/g, '');
+                    if (clean === '') {
+                      setMinute12('00');
+                    } else {
+                      const num = Math.min(Math.max(parseInt(clean, 10), 0), 59);
+                      setMinute12(String(num).padStart(2, '0'));
+                    }
+                  }}
+                />
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => {
+                    const curr = parseInt(minute12, 10) || 0;
+                    const next = curr >= 55 ? 0 : curr + 5;
+                    setMinute12(String(next).padStart(2, '0'));
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-up" size={18} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* AM / PM Toggle */}
+            <View style={styles.ampmContainer}>
+              <TouchableOpacity
+                style={[styles.ampmBtn, ampm === 'AM' && styles.ampmBtnActive]}
+                onPress={() => setAmPm('AM')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.ampmText, ampm === 'AM' && styles.ampmTextActive]}>AM</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.ampmBtn, ampm === 'PM' && styles.ampmBtnActive]}
+                onPress={() => setAmPm('PM')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.ampmText, ampm === 'PM' && styles.ampmTextActive]}>PM</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Quick Presets */}
+          <View style={styles.timePresetsRow}>
+            {[
+              { label: '09:00 AM', h: 9, m: '00', p: 'AM' as const },
+              { label: '01:00 PM', h: 1, m: '00', p: 'PM' as const },
+              { label: '06:00 PM', h: 6, m: '00', p: 'PM' as const },
+              { label: '09:00 PM', h: 9, m: '00', p: 'PM' as const },
+            ].map((preset) => {
+              const isSelected = hour12 === preset.h && minute12 === preset.m && ampm === preset.p;
+              return (
+                <TouchableOpacity
+                  key={preset.label}
+                  style={[styles.timePresetChip, isSelected && styles.timePresetChipActive]}
+                  onPress={() => {
+                    setHour12(preset.h);
+                    setMinute12(preset.m);
+                    setAmPm(preset.p);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.timePresetText, isSelected && styles.timePresetTextActive]}>
+                    {preset.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -292,6 +488,364 @@ export const CreateEditTaskScreen: React.FC<Props> = ({ editingTask, onBack, onS
             })}
           </View>
         </View>
+
+        {/* ========================================= */}
+        {/* MYDAY 2.0: REMINDER MODE (NOTIFICATION VS SMART ALARM) */}
+        {/* ========================================= */}
+        <View style={styles.sectionDivider} />
+        <Text style={styles.sectionHeaderTitle}>🚨 Alert & Reminder Options</Text>
+
+        <View style={styles.modeTabsRow}>
+          <TouchableOpacity
+            style={[
+              styles.modeTab,
+              reminderMode === 'NOTIFICATION' && styles.modeTabSelected,
+            ]}
+            onPress={() => setReminderMode('NOTIFICATION')}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={18}
+              color={reminderMode === 'NOTIFICATION' ? colors.primaryLight : colors.textMuted}
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[
+                styles.modeTabText,
+                reminderMode === 'NOTIFICATION' && styles.modeTabTextSelected,
+              ]}
+            >
+              Standard Notification
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modeTab,
+              reminderMode === 'ALARM' && styles.modeTabSelectedAlarm,
+            ]}
+            onPress={() => setReminderMode('ALARM')}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="alarm"
+              size={18}
+              color={reminderMode === 'ALARM' ? colors.danger : colors.textMuted}
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[
+                styles.modeTabText,
+                reminderMode === 'ALARM' && { color: colors.danger, fontWeight: '700' },
+              ]}
+            >
+              Smart Alarm
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Smart Alarm Settings (If ALARM selected) */}
+        {reminderMode === 'ALARM' && (
+          <View style={styles.alarmConfigBox}>
+            <View style={styles.alarmConfigHeader}>
+              <Ionicons name="volume-high-outline" size={16} color={colors.danger} style={{ marginRight: 6 }} />
+              <Text style={styles.alarmConfigTitle}>Alarm Sound & Vibration</Text>
+            </View>
+
+            <View style={styles.soundOptionsRow}>
+              {[
+                { id: 'default', label: 'Classic Clock' },
+                { id: 'radar', label: 'Digital Radar' },
+                { id: 'chime', label: 'Bell Chime' },
+                { id: 'energetic', label: 'Bugle Tune' },
+              ].map((snd) => (
+                <TouchableOpacity
+                  key={snd.id}
+                  style={[
+                    styles.soundChip,
+                    alarmSound === snd.id && styles.soundChipSelected,
+                  ]}
+                  onPress={() => setAlarmSound(snd.id)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.soundChipText,
+                      alarmSound === snd.id && styles.soundChipTextSelected,
+                    ]}
+                  >
+                    {snd.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Test Alarm Sound Preview */}
+            <TouchableOpacity
+              style={styles.testSoundBtn}
+              onPress={async () => {
+                if (testingSound) {
+                  await soundManager.stopAlarm();
+                  setTestingSound(false);
+                } else {
+                  setTestingSound(true);
+                  await soundManager.playAlarm(alarmSound);
+                  setTimeout(async () => {
+                    await soundManager.stopAlarm();
+                    setTestingSound(false);
+                  }, 3000);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={testingSound ? "stop-circle" : "play-circle"}
+                size={16}
+                color={colors.danger}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.testSoundText}>
+                {testingSound ? 'Stop Audio Preview' : 'Test Alarm Sound (3s)'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ========================================= */}
+        {/* MYDAY 2.0: SMART ESCALATION */}
+        {/* ========================================= */}
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="flame" size={16} color={colors.warning} style={{ marginRight: 6 }} />
+              <Text style={styles.toggleTitle}>Smart Escalation</Text>
+            </View>
+            <Text style={styles.toggleSubtitle}>
+              Progressively escalates if task is not completed. Automatically cleans up upon completion.
+            </Text>
+          </View>
+          <Switch
+            value={smartEscalation}
+            onValueChange={setSmartEscalation}
+            trackColor={{ false: colors.surfaceElevated, true: colors.warning }}
+            thumbColor={smartEscalation ? colors.white : colors.textMuted}
+          />
+        </View>
+
+        {smartEscalation && (
+          <View style={styles.escalationTimelineBox}>
+            <Text style={styles.escalationTimelineHeader}>Escalation Stages Timeline:</Text>
+            <View style={styles.timelineRow}>
+              <View style={styles.timelineStep}>
+                <Text style={styles.timelineTime}>T (Due)</Text>
+                <Text style={styles.timelineAction}>Reminder</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={12} color={colors.textMuted} />
+              <View style={styles.timelineStep}>
+                <Text style={styles.timelineTime}>T + 15m</Text>
+                <Text style={styles.timelineAction}>Follow-up</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={12} color={colors.textMuted} />
+              <View style={styles.timelineStep}>
+                <Text style={styles.timelineTime}>T + 30m</Text>
+                <Text style={[styles.timelineAction, { color: colors.danger }]}>Loud Alarm</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={12} color={colors.textMuted} />
+              <View style={styles.timelineStep}>
+                <Text style={styles.timelineTime}>T + 45m</Text>
+                <Text style={[styles.timelineAction, { color: colors.danger }]}>Overdue</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ========================================= */}
+        {/* MYDAY 2.0: LOCATION REMINDER */}
+        {/* ========================================= */}
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="location" size={16} color={colors.primaryLight} style={{ marginRight: 6 }} />
+              <Text style={styles.toggleTitle}>Location-Based Reminder</Text>
+            </View>
+            <Text style={styles.toggleSubtitle}>
+              Trigger reminder when arriving at or leaving a specific place.
+            </Text>
+          </View>
+          <Switch
+            value={isLocationBased}
+            onValueChange={async (val) => {
+              if (val) {
+                // Request permission only when user enables this feature!
+                const granted = await locationManager.requestPermission();
+                if (!granted) {
+                  setErrorMsg('Location permission is required to enable location reminders.');
+                  return;
+                }
+              }
+              setIsLocationBased(val);
+            }}
+            trackColor={{ false: colors.surfaceElevated, true: colors.primaryLight }}
+            thumbColor={isLocationBased ? colors.primary : colors.textMuted}
+          />
+        </View>
+
+        {isLocationBased && (
+          <View style={styles.locationBox}>
+            {/* Location Name Input */}
+            <Text style={styles.label}>Location / Place Name</Text>
+            <View style={styles.inputWithIcon}>
+              <Ionicons name="pin-outline" size={16} color={colors.textMuted} style={{ marginRight: 8 }} />
+              <TextInput
+                style={styles.inlineInput}
+                placeholder="e.g. Office, Supermarket, Gym"
+                placeholderTextColor={colors.textMuted}
+                value={locationName}
+                onChangeText={setLocationName}
+              />
+            </View>
+
+            {/* Use Current GPS Location Button */}
+            <TouchableOpacity
+              style={styles.gpsBtn}
+              onPress={async () => {
+                setLocating(true);
+                try {
+                  const loc = await locationManager.getCurrentLocation();
+                  if (loc) {
+                    setLocationLat(loc.latitude);
+                    setLocationLng(loc.longitude);
+                    if (loc.name && !locationName) {
+                      setLocationName(loc.name);
+                    }
+                  } else {
+                    setErrorMsg('Unable to retrieve current GPS location.');
+                  }
+                } finally {
+                  setLocating(false);
+                }
+              }}
+              disabled={locating}
+              activeOpacity={0.7}
+            >
+              {locating ? (
+                <ActivityIndicator size="small" color={colors.primaryLight} />
+              ) : (
+                <>
+                  <Ionicons name="navigate" size={14} color={colors.primaryLight} style={{ marginRight: 6 }} />
+                  <Text style={styles.gpsBtnText}>
+                    {locationLat && locationLng
+                      ? `GPS Saved (${locationLat.toFixed(3)}, ${locationLng.toFixed(3)})`
+                      : 'Use Current GPS Location'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Quick Presets */}
+            <Text style={[styles.label, { marginTop: 12 }]}>Quick Presets:</Text>
+            <View style={styles.presetChipsRow}>
+              {['Office', 'Home', 'Gym', 'Supermarket'].map((preset) => (
+                <TouchableOpacity
+                  key={preset}
+                  style={[
+                    styles.presetChip,
+                    locationName.toLowerCase() === preset.toLowerCase() && styles.presetChipSelected,
+                  ]}
+                  onPress={() => setLocationName(preset)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.presetChipText,
+                      locationName.toLowerCase() === preset.toLowerCase() && styles.presetChipTextSelected,
+                    ]}
+                  >
+                    {preset}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Trigger Condition (Enter vs Exit) */}
+            <Text style={[styles.label, { marginTop: 12 }]}>When to Trigger:</Text>
+            <View style={styles.triggerRow}>
+              <TouchableOpacity
+                style={[
+                  styles.triggerBtn,
+                  locationTrigger === 'ENTER' && styles.triggerBtnSelected,
+                ]}
+                onPress={() => setLocationTrigger('ENTER')}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="log-in-outline"
+                  size={15}
+                  color={locationTrigger === 'ENTER' ? colors.primaryLight : colors.textMuted}
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.triggerBtnText,
+                    locationTrigger === 'ENTER' && styles.triggerBtnTextSelected,
+                  ]}
+                >
+                  When I Arrive (Enter)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.triggerBtn,
+                  locationTrigger === 'EXIT' && styles.triggerBtnSelected,
+                ]}
+                onPress={() => setLocationTrigger('EXIT')}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="log-out-outline"
+                  size={15}
+                  color={locationTrigger === 'EXIT' ? colors.primaryLight : colors.textMuted}
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.triggerBtnText,
+                    locationTrigger === 'EXIT' && styles.triggerBtnTextSelected,
+                  ]}
+                >
+                  When I Leave (Exit)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Radius selector */}
+            <Text style={[styles.label, { marginTop: 12 }]}>Geofence Radius:</Text>
+            <View style={styles.radiusRow}>
+              {[100, 200, 500].map((rad) => (
+                <TouchableOpacity
+                  key={rad}
+                  style={[
+                    styles.radiusChip,
+                    locationRadius === rad && styles.radiusChipSelected,
+                  ]}
+                  onPress={() => setLocationRadius(rad)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.radiusChipText,
+                      locationRadius === rad && styles.radiusChipTextSelected,
+                    ]}
+                  >
+                    {rad}m
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Save Button */}
         <TouchableOpacity
@@ -486,6 +1040,391 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: colors.white,
     fontSize: 16,
+    fontWeight: '700',
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 16,
+  },
+  sectionHeaderTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginBottom: 10,
+    letterSpacing: 0.3,
+  },
+  modeTabsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  modeTabSelected: {
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryGlow,
+  },
+  modeTabSelectedAlarm: {
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerGlow,
+  },
+  modeTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  modeTabTextSelected: {
+    color: colors.primaryLight,
+    fontWeight: '700',
+  },
+  alarmConfigBox: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  alarmConfigHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  alarmConfigTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  soundOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  soundChip: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  soundChipSelected: {
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerGlow,
+  },
+  soundChipText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  soundChipTextSelected: {
+    color: colors.danger,
+    fontWeight: '700',
+  },
+  testSoundBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  testSoundText: {
+    fontSize: 12,
+    color: colors.danger,
+    fontWeight: '700',
+  },
+  escalationTimelineBox: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.warning,
+  },
+  escalationTimelineHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.warning,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timelineStep: {
+    alignItems: 'center',
+  },
+  timelineTime: {
+    fontSize: 10,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  timelineAction: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  locationBox: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  gpsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryGlow,
+    paddingVertical: 9,
+    borderRadius: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+  },
+  gpsBtnText: {
+    fontSize: 12,
+    color: colors.primaryLight,
+    fontWeight: '700',
+  },
+  presetChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  presetChip: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  presetChipSelected: {
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryGlow,
+  },
+  presetChipText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  presetChipTextSelected: {
+    color: colors.primaryLight,
+    fontWeight: '700',
+  },
+  triggerRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  triggerBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  triggerBtnSelected: {
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryGlow,
+  },
+  triggerBtnText: {
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  triggerBtnTextSelected: {
+    color: colors.primaryLight,
+    fontWeight: '700',
+  },
+  radiusRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  radiusChip: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  radiusChipSelected: {
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryGlow,
+  },
+  radiusChipText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  radiusChipTextSelected: {
+    color: colors.primaryLight,
+    fontWeight: '700',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  quickDateChips: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  quickDateChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  quickDateChipActive: {
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryGlow,
+  },
+  quickDateText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  quickDateTextActive: {
+    color: colors.primaryLight,
+    fontWeight: '700',
+  },
+  liveTimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primaryGlow,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.4)',
+  },
+  liveTimeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.primaryLight,
+  },
+  timePickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: 12,
+    justifyContent: 'center',
+    gap: 12,
+  },
+  timeBlock: {
+    alignItems: 'center',
+  },
+  timeBlockLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.textMuted,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  stepperRow: {
+    alignItems: 'center',
+  },
+  stepperBtn: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: colors.surfaceElevated,
+  },
+  timeValueInput: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    width: 46,
+    paddingVertical: 4,
+  },
+  timeColon: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.primaryLight,
+    marginTop: 14,
+  },
+  ampmContainer: {
+    marginLeft: 8,
+    gap: 6,
+    justifyContent: 'center',
+  },
+  ampmBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  ampmBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryLight,
+  },
+  ampmText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  ampmTextActive: {
+    color: colors.white,
+    fontWeight: '800',
+  },
+  timePresetsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    justifyContent: 'space-between',
+  },
+  timePresetChip: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  timePresetChipActive: {
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryGlow,
+  },
+  timePresetText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  timePresetTextActive: {
+    color: colors.primaryLight,
     fontWeight: '700',
   },
 });

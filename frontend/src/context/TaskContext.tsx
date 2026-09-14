@@ -6,11 +6,14 @@ import {
   TaskUpdatePayload, 
   TaskStatus,
   SnoozePayload,
-  ReschedulePayload
+  ReschedulePayload,
+  PlanDayRequest,
+  PlanDayResponse
 } from '../types';
 import { tasksApi } from '../api/tasks';
 import { schedulerSync } from '../notifications/schedulerSync';
 import { notificationManager } from '../notifications/notificationManager';
+import { locationManager } from '../services/locationManager';
 import { useAuth } from './AuthContext';
 
 interface TaskContextType {
@@ -21,6 +24,8 @@ interface TaskContextType {
   setSelectedTask: (task: Task | null) => void;
   refreshTasks: (filters?: { status?: TaskStatus; search?: string; date_filter?: string }) => Promise<void>;
   createTask: (payload: TaskCreatePayload) => Promise<Task>;
+  createBatchTasks: (tasks: TaskCreatePayload[]) => Promise<Task[]>;
+  planDay: (payload: PlanDayRequest) => Promise<PlanDayResponse>;
   updateTask: (id: number, payload: TaskUpdatePayload) => Promise<Task>;
   deleteTask: (id: number) => Promise<void>;
   pauseTask: (id: number) => Promise<Task>;
@@ -53,6 +58,9 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Resync alarms and reminders with fetched tasks
       schedulerSync.syncWithTasks(fetchedTasks).catch(console.warn);
+
+      // Update location-based tasks for monitoring
+      locationManager.updateLocationTasks(fetchedTasks).catch(console.warn);
     } catch (err) {
       console.warn('Error refreshing tasks:', err);
     } finally {
@@ -76,6 +84,19 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await notificationManager.scheduleTaskNotifications(newTask).catch(console.warn);
     await refreshTasks();
     return newTask;
+  };
+
+  const createBatchTasks = async (tasksList: TaskCreatePayload[]): Promise<Task[]> => {
+    const newTasks = await tasksApi.createBatchTasks(tasksList);
+    for (const t of newTasks) {
+      await notificationManager.scheduleTaskNotifications(t).catch(console.warn);
+    }
+    await refreshTasks();
+    return newTasks;
+  };
+
+  const planDay = async (payload: PlanDayRequest): Promise<PlanDayResponse> => {
+    return await tasksApi.planDay(payload);
   };
 
   const updateTask = async (id: number, payload: TaskUpdatePayload): Promise<Task> => {
@@ -162,6 +183,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSelectedTask,
         refreshTasks,
         createTask,
+        createBatchTasks,
+        planDay,
         updateTask,
         deleteTask,
         pauseTask,

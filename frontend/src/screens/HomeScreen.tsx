@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -15,8 +17,9 @@ import { Task } from '../types';
 import { colors } from '../theme/colors';
 import { TaskCard } from '../components/TaskCard';
 import { SnoozeModal } from '../components/SnoozeModal';
+import { AIPlannerModal } from '../components/AIPlannerModal';
 import { EmptyState } from '../components/EmptyState';
-import { formatDate } from '../utils/dateUtils';
+import { formatDate, getLocalTodayDateString, parseUtcDate } from '../utils/dateUtils';
 
 interface Props {
   onNavigateToCreate: () => void;
@@ -35,21 +38,73 @@ export const HomeScreen: React.FC<Props> = ({
   const { tasks, summary, isLoading, refreshTasks, completeTask, pauseTask, resumeTask, snoozeTask } = useTasks();
 
   const [snoozingTask, setSnoozingTask] = useState<Task | null>(null);
+  const [showAIPlanner, setShowAIPlanner] = useState<boolean>(false);
+  const [todayDateStr, setTodayDateStr] = useState<string>(getLocalTodayDateString());
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const formattedToday = formatDate(todayStr);
+  // Listen for AppState changes so when user opens/resumes app every day, the date updates
+  useEffect(() => {
+    const handleAppState = (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        const freshToday = getLocalTodayDateString();
+        setTodayDateStr(freshToday);
+        refreshTasks().catch(console.warn);
+      }
+    };
+    const sub = AppState.addEventListener('change', handleAppState);
 
-  // Filter tasks due today or overdue or top upcoming
-  const todayTasks = tasks.filter(t => {
+    // Also periodically check if midnight has passed
+    const timer = setInterval(() => {
+      const freshToday = getLocalTodayDateString();
+      setTodayDateStr((prev) => {
+        if (prev !== freshToday) {
+          refreshTasks().catch(console.warn);
+          return freshToday;
+        }
+        return prev;
+      });
+    }, 30000);
+
+    return () => {
+      sub.remove();
+      clearInterval(timer);
+    };
+  }, [refreshTasks]);
+
+  const formattedToday = formatDate(todayDateStr);
+
+  // Today's weekday: 0=Mon, 1=Tue, ..., 6=Sun
+  const [ty, tm, td] = todayDateStr.split('-').map(Number);
+  const todayObj = new Date(ty, (tm || 1) - 1, td || 1);
+  const todayWeekday = (todayObj.getDay() + 6) % 7;
+
+  // Filter tasks due today, overdue, or active daily/weekly habits
+  const todayTasks = tasks.filter((t) => {
     if (t.status === 'OVERDUE') return true;
-    if (t.status === 'ACTIVE' && t.next_run_at) {
-      return t.next_run_at.startsWith(todayStr);
+    if (t.status === 'ACTIVE') {
+      if (t.start_date === todayDateStr) return true;
+      if (t.recurrence_type === 'DAILY') return true;
+      if (
+        t.recurrence_type === 'WEEKLY' &&
+        t.recurrence_days &&
+        t.recurrence_days.includes(todayWeekday)
+      ) {
+        return true;
+      }
+      if (t.next_run_at) {
+        const nrDate = parseUtcDate(t.next_run_at);
+        if (nrDate) {
+          const y = nrDate.getFullYear();
+          const m = String(nrDate.getMonth() + 1).padStart(2, '0');
+          const d = String(nrDate.getDate()).padStart(2, '0');
+          if (`${y}-${m}-${d}` === todayDateStr) return true;
+        }
+      }
     }
     return false;
   });
 
   const upcomingTasks = tasks
-    .filter(t => t.status === 'ACTIVE' && t.next_run_at && !t.next_run_at.startsWith(todayStr))
+    .filter((t) => t.status === 'ACTIVE' && !todayTasks.some((tt) => tt.id === t.id))
     .slice(0, 5);
 
   const handleTogglePause = async (task: Task) => {
@@ -93,7 +148,9 @@ export const HomeScreen: React.FC<Props> = ({
               <Text style={styles.metricLabel}>Today</Text>
               <Ionicons name="calendar-outline" size={16} color={colors.primaryLight} />
             </View>
-            <Text style={styles.metricValue}>{summary?.today_due ?? 0}</Text>
+            <Text style={styles.metricValue}>
+              {Math.max(summary?.today_due ?? 0, todayTasks.length)}
+            </Text>
           </View>
 
           <View style={[styles.metricCard, { borderColor: 'rgba(16, 185, 129, 0.3)' }]}>
@@ -102,7 +159,7 @@ export const HomeScreen: React.FC<Props> = ({
               <Ionicons name="play-circle-outline" size={16} color={colors.success} />
             </View>
             <Text style={[styles.metricValue, { color: colors.success }]}>
-              {summary?.active ?? 0}
+              {Math.max(summary?.active ?? 0, tasks.filter((t) => t.status === 'ACTIVE').length)}
             </Text>
           </View>
 
@@ -126,6 +183,31 @@ export const HomeScreen: React.FC<Props> = ({
             </Text>
           </View>
         </View>
+
+        {/* AI Daily Planner Banner */}
+        <TouchableOpacity
+          style={styles.aiPlannerCard}
+          onPress={() => setShowAIPlanner(true)}
+          activeOpacity={0.85}
+        >
+          <View style={styles.aiPlannerLeft}>
+            <View style={styles.aiIconBadge}>
+              <Ionicons name="sparkles" size={20} color={colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.aiBadgeRow}>
+                <Text style={styles.aiPlannerTag}>MYDAY 2.0 AI</Text>
+              </View>
+              <Text style={styles.aiPlannerTitle}>Plan My Day</Text>
+              <Text style={styles.aiPlannerSubtitle}>
+                Tell AI what you need to study or do today. It creates your schedule automatically.
+              </Text>
+            </View>
+          </View>
+          <View style={styles.aiArrowCircle}>
+            <Ionicons name="arrow-forward" size={18} color={colors.white} />
+          </View>
+        </TouchableOpacity>
 
         {/* Section: Today's Agenda */}
         <View style={styles.sectionHeader}>
@@ -181,14 +263,14 @@ export const HomeScreen: React.FC<Props> = ({
         )}
       </ScrollView>
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={onNavigateToCreate}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="add" size={28} color={colors.white} />
-      </TouchableOpacity>
+      {/* AI Daily Planner Modal */}
+      <AIPlannerModal
+        visible={showAIPlanner}
+        onClose={() => setShowAIPlanner(false)}
+        onPlanAccepted={() => {
+          refreshTasks();
+        }}
+      />
 
       {/* Snooze Modal */}
       {snoozingTask && (
@@ -329,5 +411,77 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 8,
+  },
+  aiPlannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 20,
+    padding: 16,
+    marginVertical: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(99, 102, 241, 0.4)',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  aiPlannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  aiIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  aiBadgeRow: {
+    flexDirection: 'row',
+    marginBottom: 2,
+  },
+  aiPlannerTag: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.primaryLight,
+    letterSpacing: 1.2,
+    backgroundColor: colors.primaryGlow,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  aiPlannerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  aiPlannerSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  aiArrowCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
   },
 });

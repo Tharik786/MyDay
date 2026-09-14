@@ -9,9 +9,11 @@ from app.models.user import User
 from app.models.task import TaskStatus
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskResponse, TaskSummaryResponse,
-    SnoozeRequest, RescheduleRequest, NotificationIdUpdate
+    SnoozeRequest, RescheduleRequest, NotificationIdUpdate,
+    PlanDayRequest, PlanDayResponse, BatchTaskCreateRequest
 )
 from app.services.task_service import TaskService
+from app.services.ai_planner_service import AIPlannerService
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -51,6 +53,33 @@ async def create_task(
 ):
     task = await TaskService.create_task(db, current_user.id, task_in)
     return TaskResponse.model_validate(task)
+
+
+@router.post("/plan-day", response_model=PlanDayResponse)
+async def plan_my_day(
+    payload: PlanDayRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    AI Daily Planner: Analyzes user's daily goals, checks existing scheduled tasks,
+    resolves conflicts, and generates an optimized, conflict-free schedule.
+    """
+    return await AIPlannerService.plan_day(db, current_user.id, payload)
+
+
+@router.post("/batch", response_model=List[TaskResponse], status_code=status.HTTP_201_CREATED)
+async def create_batch_tasks(
+    payload: BatchTaskCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Accepts and creates multiple scheduled tasks at once (e.g., from AI Plan My Day).
+    """
+    tasks = await TaskService.create_batch_tasks(db, current_user.id, payload.tasks)
+    return [TaskResponse.model_validate(t) for t in tasks]
+
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

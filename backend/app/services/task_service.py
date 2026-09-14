@@ -71,7 +71,17 @@ class TaskService:
             priority=task_in.priority,
             lead_time_minutes=task_in.lead_time_minutes,
             status=initial_status,
-            next_run_at=next_run
+            next_run_at=next_run,
+            # MyDay 2.0
+            reminder_mode=task_in.reminder_mode,
+            alarm_sound=task_in.alarm_sound,
+            smart_escalation=task_in.smart_escalation,
+            is_location_based=task_in.is_location_based,
+            location_name=task_in.location_name,
+            location_lat=task_in.location_lat,
+            location_lng=task_in.location_lng,
+            location_radius=task_in.location_radius,
+            location_trigger=task_in.location_trigger
         )
         db.add(task)
         await db.flush()
@@ -82,12 +92,20 @@ class TaskService:
             task_id=task.id,
             user_id=user_id,
             event_type=HistoryEventType.CREATED,
-            details=f"Task '{task.title}' created with recurrence '{task.recurrence_type}'. Next run: {next_run}."
+            details=f"Task '{task.title}' created with recurrence '{task.recurrence_type}'. Mode: {task.reminder_mode}. Next run: {next_run}."
         )
 
         await db.commit()
         await db.refresh(task)
         return task
+
+    @staticmethod
+    async def create_batch_tasks(db: AsyncSession, user_id: int, tasks_in: List[TaskCreate]) -> List[Task]:
+        created_tasks: List[Task] = []
+        for t_in in tasks_in:
+            task = await TaskService.create_task(db, user_id, t_in)
+            created_tasks.append(task)
+        return created_tasks
 
     @staticmethod
     async def get_task_by_id(db: AsyncSession, task_id: int, user_id: int) -> Task:

@@ -155,8 +155,72 @@ async def run_all_tests():
         for h in history_items:
             print(f"    - Event: {h['event_type']} on Task #{h['task_id']} | Details: {h.get('details')}")
 
+        # 13. MyDay 2.0: Create Task with Smart Alarm, Smart Escalation, and Location
+        print("\n[STEP 13] MyDay 2.0: Creating Smart Alarm & Location Reminder Task...")
+        task_v2_payload = {
+            "title": "Submit Quarterly Report",
+            "description": "When arriving at office, submit the financial report.",
+            "start_date": today.isoformat(),
+            "start_time": "11:00:00",
+            "timezone": "Asia/Kolkata",
+            "recurrence_type": "ONE_TIME",
+            "priority": "HIGH",
+            "lead_time_minutes": 10,
+            "reminder_mode": "ALARM",
+            "alarm_sound": "radar",
+            "smart_escalation": True,
+            "is_location_based": True,
+            "location_name": "Main Office",
+            "location_lat": 12.9716,
+            "location_lng": 77.5946,
+            "location_radius": 200,
+            "location_trigger": "ENTER"
+        }
+        res = await client.post("/api/v1/tasks", json=task_v2_payload, headers=headers)
+        assert res.status_code == 201, f"Create MyDay 2.0 Task failed: {res.text}"
+        task_v2 = res.json()
+        assert task_v2["reminder_mode"] == "ALARM"
+        assert task_v2["smart_escalation"] is True
+        assert task_v2["is_location_based"] is True
+        assert task_v2["location_name"] == "Main Office"
+        print(f" -> MyDay 2.0 Task created! ID: {task_v2['id']} | Mode: {task_v2['reminder_mode']} | Escalation: {task_v2['smart_escalation']} | Location: {task_v2['location_name']}")
+
+        # 14. MyDay 2.0: AI Daily Planner ("Plan My Day")
+        print("\n[STEP 14] MyDay 2.0: Testing AI Daily Planner (/api/v1/tasks/plan-day)...")
+        plan_prompt = "I need to study Physics for 3 hours today."
+        res = await client.post("/api/v1/tasks/plan-day", json={"prompt": plan_prompt}, headers=headers)
+        assert res.status_code == 200, f"Plan My Day failed: {res.text}"
+        plan = res.json()
+        assert len(plan["items"]) > 0, "Expected at least 1 planned item"
+        print(f" -> AI Plan Generated successfully! Summary: {plan['summary']}")
+        for it in plan["items"]:
+            print(f"    - Planned: '{it['title']}' at {it['start_time']} for {it['duration_minutes']} mins (Priority: {it['priority']}, Mode: {it['reminder_mode']}, Escalation: {it['smart_escalation']})")
+
+        # 15. MyDay 2.0: Batch Task Creation from AI Plan
+        print("\n[STEP 15] MyDay 2.0: Testing Batch Task Creation from AI Plan (/api/v1/tasks/batch)...")
+        batch_tasks = []
+        for it in plan["items"]:
+            formatted_time = it["start_time"] if len(it["start_time"]) == 8 else f"{it['start_time']}:00"
+            batch_tasks.append({
+                "title": it["title"],
+                "description": it.get("description"),
+                "start_date": it["start_date"],
+                "start_time": formatted_time,
+                "timezone": "Asia/Kolkata",
+                "recurrence_type": "ONE_TIME",
+                "priority": it["priority"],
+                "lead_time_minutes": 10,
+                "reminder_mode": it["reminder_mode"],
+                "smart_escalation": it["smart_escalation"]
+            })
+        res = await client.post("/api/v1/tasks/batch", json={"tasks": batch_tasks}, headers=headers)
+        assert res.status_code == 201, f"Batch creation failed: {res.text}"
+        created_batch = res.json()
+        assert len(created_batch) == len(batch_tasks)
+        print(f" -> Batch created {len(created_batch)} tasks successfully!")
+
     print("\n" + "=" * 70)
-    print("  ✓ ALL BACKEND API ENDPOINTS & DATA TRANSACTIONS PASSED 100%!")
+    print("  [SUCCESS] ALL BACKEND API ENDPOINTS & MYDAY 2.0 FEATURES PASSED 100%!")
     print("=" * 70)
 
 

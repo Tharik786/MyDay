@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Text, Date, Time, DateTime, 
-    ForeignKey, JSON, Enum as SQLEnum
+    ForeignKey, JSON, Enum as SQLEnum, Boolean, Float
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -63,6 +63,19 @@ class Task(Base):
     status = Column(SQLEnum(TaskStatus), default=TaskStatus.ACTIVE, nullable=False, index=True)
     priority = Column(SQLEnum(TaskPriority), default=TaskPriority.MEDIUM, nullable=False)
     lead_time_minutes = Column(Integer, default=0, nullable=False)  # Notify N minutes before event
+    
+    # MyDay 2.0: Smart Alarm & Escalation
+    reminder_mode = Column(String(32), default="NOTIFICATION", nullable=False)  # NOTIFICATION | ALARM
+    alarm_sound = Column(String(64), default="default", nullable=False)  # default | radar | chime | energetic
+    smart_escalation = Column(Boolean, default=False, nullable=False)  # T -> T+15 -> T+30 -> T+45
+    
+    # MyDay 2.0: Location-Based Reminders
+    is_location_based = Column(Boolean, default=False, nullable=False)
+    location_name = Column(String(255), nullable=True)
+    location_lat = Column(Float, nullable=True)
+    location_lng = Column(Float, nullable=True)
+    location_radius = Column(Integer, default=200, nullable=True)  # in meters
+    location_trigger = Column(String(32), default="ENTER", nullable=True)  # ENTER | EXIT
     
     # Calculated timestamps (stored in UTC)
     next_run_at = Column(DateTime(timezone=True), nullable=True, index=True)

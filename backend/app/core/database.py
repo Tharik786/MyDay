@@ -46,6 +46,32 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+def _migrate_tasks_table(conn):
+    from sqlalchemy import inspect, text
+    inspector = inspect(conn)
+    existing_cols = {col["name"] for col in inspector.get_columns("tasks")}
+    
+    new_columns = [
+        ("reminder_mode", "VARCHAR(32) DEFAULT 'NOTIFICATION'"),
+        ("alarm_sound", "VARCHAR(64) DEFAULT 'default'"),
+        ("smart_escalation", "BOOLEAN DEFAULT 0"),
+        ("is_location_based", "BOOLEAN DEFAULT 0"),
+        ("location_name", "VARCHAR(255)"),
+        ("location_lat", "FLOAT"),
+        ("location_lng", "FLOAT"),
+        ("location_radius", "INTEGER DEFAULT 200"),
+        ("location_trigger", "VARCHAR(32) DEFAULT 'ENTER'"),
+    ]
+    
+    for col_name, col_type in new_columns:
+        if col_name not in existing_cols:
+            try:
+                conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"))
+                print(f" -> Migrated tasks table: added column {col_name}")
+            except Exception as e:
+                print(f" -> Notice: Could not add column {col_name} (might already exist): {e}")
+
+
 async def init_db():
     # Import all models here so they are registered with Base.metadata
     from app.models.user import User
@@ -57,4 +83,5 @@ async def init_db():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_migrate_tasks_table)
     print(f"--> Database tables ready on: {db_target}")
