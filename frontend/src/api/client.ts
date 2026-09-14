@@ -15,7 +15,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 45000,
 });
 
 // Initialize base URL from AsyncStorage or default to production Render URL

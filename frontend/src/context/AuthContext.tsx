@@ -58,12 +58,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setUser(freshUser);
               storage.setUser(freshUser);
             }
-          }).catch(() => {
-            // Token invalid or expired
-            storage.clearAuth();
-            if (isMounted) {
-              setToken(null);
-              setUser(null);
+          }).catch((err: any) => {
+            // Only clear auth if token is genuinely rejected with 401/403
+            const status = err?.response?.status;
+            const msg = String(err?.message || '').toLowerCase();
+            if (status === 401 || status === 403 || msg.includes('401') || msg.includes('unauthorized') || msg.includes('forbidden')) {
+              storage.clearAuth();
+              if (isMounted) {
+                setToken(null);
+                setUser(null);
+              }
+            } else {
+              console.warn('Server cold start or network delay during bootstrap, preserving session:', err);
             }
           });
         }
