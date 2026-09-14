@@ -31,31 +31,32 @@ export const Toast: React.FC<ToastProps> = ({
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
+    if (!visible) return;
 
-      const timer = setTimeout(() => {
-        dismiss();
-      }, duration);
+    translateY.setValue(-120);
+    opacity.setValue(0);
 
-      return () => clearTimeout(timer);
-    } else {
-      dismiss();
-    }
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const timer = setTimeout(() => {
+      handleDismiss();
+    }, duration);
+
+    return () => clearTimeout(timer);
   }, [visible]);
 
-  const dismiss = () => {
+  const handleDismiss = () => {
     Animated.parallel([
       Animated.timing(translateY, {
         toValue: -120,
@@ -116,7 +117,7 @@ export const Toast: React.FC<ToastProps> = ({
     >
       <TouchableOpacity
         style={[styles.container, { backgroundColor: theme.bgColor, borderColor: theme.borderColor }]}
-        onPress={dismiss}
+        onPress={handleDismiss}
         activeOpacity={0.9}
       >
         <Ionicons name={theme.icon} size={26} color={theme.color} style={styles.icon} />
@@ -124,7 +125,7 @@ export const Toast: React.FC<ToastProps> = ({
           {title ? <Text style={styles.title}>{title}</Text> : null}
           <Text style={styles.message}>{message}</Text>
         </View>
-        <TouchableOpacity onPress={dismiss} style={styles.closeBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={handleDismiss} style={styles.closeBtn} activeOpacity={0.7}>
           <Ionicons name="close" size={18} color="rgba(255, 255, 255, 0.6)" />
         </TouchableOpacity>
       </TouchableOpacity>

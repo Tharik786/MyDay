@@ -53,14 +53,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ showToast, hideToast }}>
       {children}
-      <Toast
-        visible={toast.visible}
-        type={toast.type}
-        title={toast.title}
-        message={toast.message}
-        duration={toast.duration}
-        onDismiss={hideToast}
-      />
+      {toast.visible && (
+        <Toast
+          visible={toast.visible}
+          type={toast.type}
+          title={toast.title}
+          message={toast.message}
+          duration={toast.duration}
+          onDismiss={hideToast}
+        />
+      )}
     </ToastContext.Provider>
   );
 };

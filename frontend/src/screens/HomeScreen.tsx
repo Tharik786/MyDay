@@ -72,8 +72,8 @@ export const HomeScreen: React.FC<Props> = ({
 
   const formattedToday = formatDate(todayDateStr);
 
-  // Today's weekday: 0=Mon, 1=Tue, ..., 6=Sun
-  const [ty, tm, td] = todayDateStr.split('-').map(Number);
+  const dateClean = todayDateStr || getLocalTodayDateString();
+  const [ty, tm, td] = dateClean.split('-').map(Number);
   const todayObj = new Date(ty, (tm || 1) - 1, td || 1);
   const todayWeekday = (todayObj.getDay() + 6) % 7;
 
