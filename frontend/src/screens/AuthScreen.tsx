@@ -12,10 +12,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { colors } from '../theme/colors';
 
 export const AuthScreen: React.FC = () => {
   const { login, register } = useAuth();
+  const { showToast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,9 +25,11 @@ export const AuthScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     setErrorMessage(null);
+    setSuccessMessage(null);
     if (!email || !password) {
       setErrorMessage('Please fill in all required fields.');
       return;
@@ -39,14 +43,36 @@ export const AuthScreen: React.FC = () => {
     try {
       if (isLogin) {
         await login({ email: email.trim(), password });
+        showToast({
+          type: 'success',
+          title: 'Login Successful! 👋',
+          message: 'Welcome back to MyDay.',
+          duration: 3000,
+        });
       } else {
         const defaultTz = 'Asia/Kolkata';
-        await register({
-          email: email.trim(),
-          password,
-          full_name: fullName.trim() || undefined,
-          timezone: defaultTz,
+        await register(
+          {
+            email: email.trim(),
+            password,
+            full_name: fullName.trim() || undefined,
+            timezone: defaultTz,
+          },
+          false // Do not auto-login; show toast & switch to login page
+        );
+
+        // 1. Show toast notification
+        showToast({
+          type: 'success',
+          title: 'Account Created! 🎉',
+          message: 'Your account was created successfully. Please sign in now.',
+          duration: 4000,
         });
+
+        // 2. Automatically navigate to Sign In page
+        setIsLogin(true);
+        setSuccessMessage('Account created successfully! Enter your password to sign in.');
+        setPassword('');
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Authentication failed. Check your credentials.');
@@ -96,6 +122,14 @@ export const AuthScreen: React.FC = () => {
               <Text style={[styles.tabText, !isLogin && styles.tabTextActive]}>Register</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Success Banner */}
+          {successMessage && isLogin && (
+            <View style={styles.successBanner}>
+              <Ionicons name="checkmark-circle-outline" size={18} color={colors.success} style={{ marginRight: 8 }} />
+              <Text style={styles.successText}>{successMessage}</Text>
+            </View>
+          )}
 
           {/* Error Banner */}
           {errorMessage && (
@@ -253,6 +287,22 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: colors.white,
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  successText: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
   },
   errorBanner: {
     flexDirection: 'row',

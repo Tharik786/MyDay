@@ -12,7 +12,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (payload: LoginPayload) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  register: (payload: RegisterPayload, autoLogin?: boolean) => Promise<{ access_token: string; user: User }>;
   logout: () => Promise<void>;
   updateUser: (data: { full_name?: string; timezone?: string }) => Promise<void>;
 }
@@ -102,17 +102,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (payload: RegisterPayload) => {
+  const register = async (payload: RegisterPayload, autoLogin: boolean = false) => {
     setIsLoading(true);
     try {
       if (!payload.timezone || payload.timezone === 'America/Toronto' || payload.timezone === 'UTC') {
         payload.timezone = DEFAULT_TIMEZONE;
       }
       const data = await authApi.register(payload);
-      setToken(data.access_token);
-      setUser(data.user);
-      await storage.setToken(data.access_token);
-      await storage.setUser(data.user);
+      if (autoLogin) {
+        setToken(data.access_token);
+        setUser(data.user);
+        await storage.setToken(data.access_token);
+        await storage.setUser(data.user);
+      }
+      return data;
     } finally {
       setIsLoading(false);
     }

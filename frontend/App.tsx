@@ -15,6 +15,7 @@ import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { TaskProvider, useTasks } from './src/context/TaskContext';
+import { ToastProvider } from './src/context/ToastContext';
 import { colors } from './src/theme/colors';
 import { ScreenTab, Task } from './src/types';
 import { registerInAppAlarmListener } from './src/notifications/notificationManager';
@@ -245,11 +246,13 @@ const MainNavigator: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <TaskProvider>
-        <MainNavigator />
-      </TaskProvider>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <TaskProvider>
+          <MainNavigator />
+        </TaskProvider>
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 
