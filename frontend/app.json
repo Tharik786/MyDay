@@ -19,6 +19,7 @@
         "backgroundColor": "#0B0F19",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
+      "usesCleartextTraffic": true,
       "permissions": [
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
@@ -38,6 +39,12 @@
           "icon": "./assets/icon.png",
           "color": "#6366F1",
           "sounds": []
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow MyDay to access your location to trigger reminder alerts."
         }
       ]
     ],
