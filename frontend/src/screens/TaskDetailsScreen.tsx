@@ -192,7 +192,7 @@ export const TaskDetailsScreen: React.FC<Props> = ({ task, onBack, onEdit }) => 
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Alert Mode</Text>
               <Text style={[styles.detailValue, task.reminder_mode === 'ALARM' && { color: colors.danger, fontWeight: '700' }]}>
-                {task.reminder_mode === 'ALARM' ? `🚨 Smart Alarm (${task.alarm_sound || 'default'})` : '🔔 Standard Notification'}
+                {task.reminder_mode === 'ALARM' ? `🚨 Smart Alarm (${task.alarm_sound === 'default' || !task.alarm_sound ? 'Mobile Default Alarm' : task.alarm_sound})` : '🔔 Standard Notification'}
               </Text>
             </View>
 

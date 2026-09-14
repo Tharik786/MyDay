@@ -555,7 +555,7 @@ export const CreateEditTaskScreen: React.FC<Props> = ({ editingTask, onBack, onS
 
             <View style={styles.soundOptionsRow}>
               {[
-                { id: 'default', label: 'Classic Clock' },
+                { id: 'default', label: '📱 Mobile Default Alarm' },
                 { id: 'radar', label: 'Digital Radar' },
                 { id: 'chime', label: 'Bell Chime' },
                 { id: 'energetic', label: 'Bugle Tune' },
